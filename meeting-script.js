@@ -15,6 +15,7 @@ let participantSubscription = null;
 let meetingSubscription = null;
 let chatSubscription = null;
 let currentParticipantId = null; // Store our participant ID for tracking
+let cleanupInterval = null; // Periodic cleanup interval
 
 // --- DOM Elements ---
 const sidebar = document.getElementById('sidebar');
@@ -548,11 +549,12 @@ async function requestMediaPermissions() {
 async function loadParticipants() {
     try {
         // Only load participants who are admitted (not waiting, not left)
+        // Use LEFT JOIN to handle both registered users and guests
         const { data, error } = await supabaseClient
             .from('participants')
             .select(`
                 *,
-                user:users(full_name, email, avatar_url)
+                users(full_name, email, avatar_url)
             `)
             .eq('meeting_id', meetingId)
             .eq('status', 'admitted')
@@ -562,6 +564,9 @@ async function loadParticipants() {
         
         participants = data || [];
         window.participants = participants; // Update global reference
+        
+        console.log('✅ Loaded participants:', participants.length, participants);
+        
         updateParticipantsList();
     } catch (error) {
         console.error('Error loading participants:', error);
@@ -574,8 +579,14 @@ function updateParticipantsList() {
     if (!participantsList) return;
     
     participantsList.innerHTML = participants.map(p => {
-        const isCurrentUser = currentUser && p.user_id === currentUser.id;
-        const userName = p.user?.full_name || p.guest_name || 'Guest';
+        const isCurrentUser = (currentUser && p.user_id === currentUser.id) || p.id === currentParticipantId;
+        // Improved name resolution: prioritize user full_name, then email, then guest_name
+        const userName = p.users?.full_name || 
+                        p.user?.full_name || 
+                        p.users?.email?.split('@')[0] || 
+                        p.user?.email?.split('@')[0] || 
+                        p.guest_name || 
+                        'Guest User';
         const isHost = p.role === 'host';
         
         return `
@@ -628,10 +639,64 @@ function handleMeetingUpdate(payload) {
     }
 }
 
-// --- Handle Participant Update ---
-function handleParticipantUpdate(payload) {
-    console.log('Participant updated:', payload);
+// --- Handle Participant Joined ---
+function handleParticipantJoined(participant) {
+    console.log('✅ Participant joined:', participant);
+    
+    // Reload participants to get updated list
     loadParticipants();
+    
+    // Show notification (avoid showing for self)
+    const isCurrentUser = (currentUser && participant.user_id === currentUser.id) || participant.id === currentParticipantId;
+    if (!isCurrentUser && hasInitialLoad) {
+        const userName = participant.users?.full_name || 
+                        participant.user?.full_name || 
+                        participant.guest_name || 
+                        'Someone';
+        showNotification(`${userName} joined the meeting`, 'info');
+    }
+}
+
+// --- Handle Participant Updated ---
+function handleParticipantUpdated(participant) {
+    console.log('🔄 Participant updated:', participant);
+    loadParticipants();
+}
+
+// --- Handle Participant Left ---
+function handleParticipantLeft(participant) {
+    console.log('👋 Participant left:', participant);
+    
+    // Remove from participants array
+    participants = participants.filter(p => p.id !== participant.id);
+    window.participants = participants;
+    
+    // Remove video element
+    if (window.VideoManager) {
+        window.VideoManager.removeRemote(participant.id);
+        console.log('🗑️ Removed video for:', participant.id);
+    }
+    
+    // Close and remove peer connection
+    if (window.webrtcPeerConnections && window.webrtcPeerConnections[participant.id]) {
+        try {
+            window.webrtcPeerConnections[participant.id].close();
+            delete window.webrtcPeerConnections[participant.id];
+            console.log('🔌 Closed peer connection for:', participant.id);
+        } catch (err) {
+            console.error('Error closing peer connection:', err);
+        }
+    }
+    
+    // Update UI
+    updateParticipantsList();
+    
+    // Show notification
+    const userName = participant.users?.full_name || 
+                    participant.user?.full_name || 
+                    participant.guest_name || 
+                    'Someone';
+    showNotification(`${userName} left the meeting`, 'info');
 }
 
 // --- Mute Participant (Host Only) ---
@@ -1164,21 +1229,33 @@ async function initializeMeeting() {
 let hasInitialLoad = false;
 
 function setupRealtimeSubscriptions() {
-    // Subscribe to participant changes
-    participantSubscription = DatabaseService.subscribeParticipantChanges(meetingId, (payload) => {
-        console.log('Participant change:', payload);
-        
-        // Only show notification for new participants after initial load
-        if (hasInitialLoad && payload.eventType === 'INSERT') {
-            const isCurrentUser = currentUser && payload.new.user_id === currentUser.id;
-            if (!isCurrentUser) {
-                const userName = payload.new.user?.full_name || payload.new.guest_name || 'Someone';
-                showNotification(`${userName} joined the meeting`, 'info');
+    // Subscribe to ALL participant changes (INSERT, UPDATE, DELETE)
+    participantSubscription = supabaseClient
+        .channel(`participants:${meetingId}`)
+        .on('postgres_changes',
+            { 
+                event: '*',  // Listen to ALL events
+                schema: 'public', 
+                table: 'participants',
+                filter: `meeting_id=eq.${meetingId}`
+            },
+            (payload) => {
+                console.log('🔔 Participant event:', payload.eventType, payload);
+                
+                switch(payload.eventType) {
+                    case 'INSERT':
+                        handleParticipantJoined(payload.new);
+                        break;
+                    case 'UPDATE':
+                        handleParticipantUpdated(payload.new);
+                        break;
+                    case 'DELETE':
+                        handleParticipantLeft(payload.old);
+                        break;
+                }
             }
-        }
-        
-        loadParticipants();
-    });
+        )
+        .subscribe();
     
     // Subscribe to meeting changes
     meetingSubscription = DatabaseService.subscribeMeetingChanges(meetingId, (payload) => {
@@ -1213,6 +1290,48 @@ function setupRealtimeSubscriptions() {
     setTimeout(() => {
         hasInitialLoad = true;
     }, 1000);
+    
+    // Start periodic cleanup of stale connections (every 30 seconds)
+    cleanupInterval = setInterval(() => {
+        cleanupStaleConnections();
+    }, 30000);
+}
+
+// --- Cleanup Stale Connections ---
+function cleanupStaleConnections() {
+    console.log('🧹 Running periodic cleanup...');
+    
+    // Get current participant IDs from our participants array
+    const currentParticipantIds = participants.map(p => p.id);
+    
+    // Remove video elements for non-existent participants
+    if (window.VideoManager) {
+        const videoElements = document.querySelectorAll('[data-participant-id]');
+        videoElements.forEach(el => {
+            const participantId = el.getAttribute('data-participant-id');
+            if (participantId && !currentParticipantIds.includes(participantId) && participantId !== currentParticipantId) {
+                console.log('🗑️ Cleaning up stale video element:', participantId);
+                window.VideoManager.removeRemote(participantId);
+            }
+        });
+    }
+    
+    // Close stale peer connections
+    if (window.webrtcPeerConnections) {
+        Object.keys(window.webrtcPeerConnections).forEach(peerId => {
+            if (!currentParticipantIds.includes(peerId) && peerId !== currentParticipantId) {
+                console.log('🔌 Closing stale peer connection:', peerId);
+                try {
+                    window.webrtcPeerConnections[peerId].close();
+                    delete window.webrtcPeerConnections[peerId];
+                } catch (err) {
+                    console.error('Error closing stale connection:', err);
+                }
+            }
+        });
+    }
+    
+    console.log('✅ Cleanup complete. Active participants:', currentParticipantIds.length);
 }
 
 // Enhanced Leave Meeting
@@ -1230,6 +1349,12 @@ async function leaveMeeting() {
         
         // Close peer connections
         Object.values(peerConnections).forEach(pc => pc.close());
+        
+        // Clear cleanup interval
+        if (cleanupInterval) {
+            clearInterval(cleanupInterval);
+            cleanupInterval = null;
+        }
         
         // Unsubscribe from realtime
         if (participantSubscription) participantSubscription.unsubscribe();
