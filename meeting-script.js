@@ -581,12 +581,26 @@ function updateParticipantsList() {
     participantsList.innerHTML = participants.map(p => {
         const isCurrentUser = (currentUser && p.user_id === currentUser.id) || p.id === currentParticipantId;
         // Improved name resolution: prioritize user full_name, then email, then guest_name
-        const userName = p.users?.full_name || 
-                        p.user?.full_name || 
-                        p.users?.email?.split('@')[0] || 
-                        p.user?.email?.split('@')[0] || 
-                        p.guest_name || 
-                        'Guest User';
+        // Also check if current user to show their name
+        let userName = 'Participant';
+        
+        if (p.users?.full_name) {
+            userName = p.users.full_name;
+        } else if (p.user?.full_name) {
+            userName = p.user.full_name;
+        } else if (p.users?.email) {
+            userName = p.users.email.split('@')[0];
+        } else if (p.user?.email) {
+            userName = p.user.email.split('@')[0];
+        } else if (p.guest_name) {
+            userName = p.guest_name;
+        } else if (isCurrentUser && currentUser) {
+            // If it's current user, use their info
+            userName = currentUser.user_metadata?.full_name || 
+                      currentUser.email?.split('@')[0] || 
+                      'You';
+        }
+        
         const isHost = p.role === 'host';
         
         return `
@@ -640,19 +654,44 @@ function handleMeetingUpdate(payload) {
 }
 
 // --- Handle Participant Joined ---
-function handleParticipantJoined(participant) {
+async function handleParticipantJoined(participant) {
     console.log('✅ Participant joined:', participant);
     
     // Reload participants to get updated list
-    loadParticipants();
+    await loadParticipants();
+    
+    // Check if this is not us
+    const isCurrentUser = (currentUser && participant.user_id === currentUser.id) || 
+                          participant.id === currentParticipantId;
+    
+    if (!isCurrentUser && participant.status === 'admitted') {
+        // Establish WebRTC connection with new participant
+        if (window.WebRTC && window.WebRTC.createPeerConnection) {
+            try {
+                await window.WebRTC.createPeerConnection(participant.id);
+                console.log(`🔗 Created peer connection for: ${participant.id}`);
+            } catch (err) {
+                console.error(`❌ Failed to create peer connection for ${participant.id}:`, err);
+            }
+        }
+    }
     
     // Show notification (avoid showing for self)
-    const isCurrentUser = (currentUser && participant.user_id === currentUser.id) || participant.id === currentParticipantId;
     if (!isCurrentUser && hasInitialLoad) {
-        const userName = participant.users?.full_name || 
-                        participant.user?.full_name || 
-                        participant.guest_name || 
-                        'Someone';
+        let userName = 'Someone';
+        
+        if (participant.users?.full_name) {
+            userName = participant.users.full_name;
+        } else if (participant.user?.full_name) {
+            userName = participant.user.full_name;
+        } else if (participant.users?.email) {
+            userName = participant.users.email.split('@')[0];
+        } else if (participant.user?.email) {
+            userName = participant.user.email.split('@')[0];
+        } else if (participant.guest_name) {
+            userName = participant.guest_name;
+        }
+        
         showNotification(`${userName} joined the meeting`, 'info');
     }
 }
@@ -691,11 +730,21 @@ function handleParticipantLeft(participant) {
     // Update UI
     updateParticipantsList();
     
-    // Show notification
-    const userName = participant.users?.full_name || 
-                    participant.user?.full_name || 
-                    participant.guest_name || 
-                    'Someone';
+    // Show notification with proper name resolution
+    let userName = 'Someone';
+    
+    if (participant.users?.full_name) {
+        userName = participant.users.full_name;
+    } else if (participant.user?.full_name) {
+        userName = participant.user.full_name;
+    } else if (participant.users?.email) {
+        userName = participant.users.email.split('@')[0];
+    } else if (participant.user?.email) {
+        userName = participant.user.email.split('@')[0];
+    } else if (participant.guest_name) {
+        userName = participant.guest_name;
+    }
+    
     showNotification(`${userName} left the meeting`, 'info');
 }
 
@@ -1107,17 +1156,30 @@ async function initializeMeeting() {
         
         // Add or update participant in database
         if (currentUser) {
-            // Check if participant already exists
-            const { data: existingParticipant, error: checkError } = await supabaseClient
+            // Check if participant already exists (fetch all to handle duplicates)
+            const { data: existingParticipants, error: checkError } = await supabaseClient
                 .from('participants')
                 .select('*')
                 .eq('meeting_id', meetingId)
                 .eq('user_id', currentUser.id)
-                .single();
+                .order('joined_at', { ascending: false });
             
-            if (existingParticipant) {
-                // Update existing participant - rejoin
+            if (existingParticipants && existingParticipants.length > 0) {
+                // Use the most recent participant record
+                const existingParticipant = existingParticipants[0];
                 currentParticipantId = existingParticipant.id;
+                
+                // Clean up any duplicate old records
+                if (existingParticipants.length > 1) {
+                    const oldIds = existingParticipants.slice(1).map(p => p.id);
+                    await supabaseClient
+                        .from('participants')
+                        .delete()
+                        .in('id', oldIds);
+                    console.log(`🧹 Cleaned up ${oldIds.length} duplicate participant records`);
+                }
+                
+                // Update the current participant record
                 const { error: updateError } = await supabaseClient
                     .from('participants')
                     .update({
@@ -1130,6 +1192,8 @@ async function initializeMeeting() {
                 
                 if (updateError) {
                     console.error('Error updating participant:', updateError);
+                } else {
+                    console.log('✅ Updated existing participant record');
                 }
             } else {
                 // Add new participant
@@ -1149,6 +1213,7 @@ async function initializeMeeting() {
                     console.error('Error adding participant:', participantError);
                 } else {
                     currentParticipantId = newParticipant.id;
+                    console.log('✅ Added new participant record');
                 }
             }
         } else {

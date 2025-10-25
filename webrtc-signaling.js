@@ -423,9 +423,12 @@ function cleanupWebRTC() {
 
 window.WebRTC = {
     setupSignaling,
+    createPeerConnection,
     cleanupWebRTC,
     peerConnections: webrtcPeerConnections,
     remoteStreams
 };
+
+window.signalingChannel = signalingChannel; // Expose for other modules
 
 console.log('WebRTC signaling module loaded');
