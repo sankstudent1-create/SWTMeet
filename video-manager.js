@@ -260,6 +260,7 @@ async function startScreenShareBroadcast() {
         
         if (window.webrtcPeerConnections) {
             let addedCount = 0;
+            const renegotiationPromises = [];
             
             // Add track to all peers and trigger renegotiation
             for (const [peerId, pc] of Object.entries(window.webrtcPeerConnections)) {
@@ -272,7 +273,7 @@ async function startScreenShareBroadcast() {
                     
                     // CRITICAL: Trigger renegotiation by creating a new offer
                     // This is required when adding tracks to existing connections
-                    (async () => {
+                    const renegPromise = (async () => {
                         try {
                             const offer = await pc.createOffer();
                             await pc.setLocalDescription(offer);
@@ -291,11 +292,15 @@ async function startScreenShareBroadcast() {
                                     }
                                 });
                                 console.log(`🔄 Renegotiation offer sent to ${peerId} for screen share (Stream ID: ${screenShareStream.id})`);
+                            } else {
+                                console.error(`❌ No signaling channel for ${peerId}`);
                             }
                         } catch (renegErr) {
                             console.error(`❌ Renegotiation failed for ${peerId}:`, renegErr);
                         }
                     })();
+                    
+                    renegotiationPromises.push(renegPromise);
                     
                 } catch (err) {
                     console.error(`❌ Failed to add screen to ${peerId}:`, err);
@@ -303,6 +308,10 @@ async function startScreenShareBroadcast() {
             }
             
             console.log(`📺 Broadcasting screen to ${addedCount} participants with stream ID: ${screenShareStream.id}`);
+            
+            // Wait for all renegotiations to complete
+            await Promise.allSettled(renegotiationPromises);
+            console.log(`✅ All renegotiation offers sent for screen share`);
         }
         
         // Store screen share state globally for late joiners
