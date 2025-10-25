@@ -1,10 +1,7 @@
 services:
   - type: web
     name: swtmeet
-    env: static
-    buildCommand: echo "No build required - static site"
-    staticPublishPath: .
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /

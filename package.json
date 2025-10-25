@@ -4,8 +4,8 @@
   "description": "Modern video conferencing platform with WebRTC and Supabase",
   "main": "index.html",
   "scripts": {
-    "start": "python3 -m http.server 8000",
-    "dev": "python3 -m http.server 8000"
+    "start": "npx serve -s . -l 8000",
+    "build": "echo 'Static site - no build required'"
   },
   "keywords": [
     "webrtc",
@@ -19,5 +19,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/sankstudent1-create/SWTMeet.git"
+  },
+  "dependencies": {
+    "serve": "^14.2.1"
   }
 }
