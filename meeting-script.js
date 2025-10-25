@@ -10,9 +10,6 @@ let participants = [];
 let chatMessages = [];
 let isAudioMuted = false;
 let isVideoStopped = false;
-
-// Make participants globally accessible for webrtc-signaling.js
-window.participants = participants;
 let meetingLocked = false;
 let participantSubscription = null;
 let meetingSubscription = null;

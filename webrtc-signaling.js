@@ -179,7 +179,15 @@ async function createPeerConnection(participantId) {
             }
         } else {
             // Regular camera/audio track
-            remoteStreams[participantId].addTrack(event.track);
+            // Initialize remote stream if it doesn't exist
+            if (!remoteStreams[participantId]) {
+                remoteStreams[participantId] = stream || new MediaStream();
+            }
+            
+            // Add track if it's not already in the stream
+            if (stream && !remoteStreams[participantId].getTracks().includes(event.track)) {
+                remoteStreams[participantId] = stream;
+            }
             
             // Store the stream ID for comparison
             if (!remoteStreams[participantId].id && streamId) {
@@ -198,6 +206,7 @@ async function createPeerConnection(participantId) {
                                            participant?.guest_name ||
                                            'Participant';
                     
+                    console.log('📹 Displaying remote video for:', participantName, 'Stream:', remoteStreams[participantId]);
                     window.VideoManager.displayRemote(participantId, remoteStreams[participantId], participantName);
                 }
             }
