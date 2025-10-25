@@ -260,7 +260,8 @@ async function startScreenShareBroadcast() {
         if (window.webrtcPeerConnections) {
             let addedCount = 0;
             
-            Object.entries(window.webrtcPeerConnections).forEach(([peerId, pc]) => {
+            // Add track to all peers and trigger renegotiation
+            for (const [peerId, pc] of Object.entries(window.webrtcPeerConnections)) {
                 try {
                     // Add screen track as a NEW sender (keeps camera track)
                     const sender = pc.addTrack(screenTrack, screenShareStream);
@@ -268,17 +269,35 @@ async function startScreenShareBroadcast() {
                     addedCount++;
                     console.log(`✅ Screen track added to peer: ${peerId} with stream ID: ${screenShareStream.id}`);
                     
-                    // Send metadata via data channel to mark this as screen share
-                    if (window.WebRTC && window.WebRTC.sendScreenShareMetadata) {
-                        window.WebRTC.sendScreenShareMetadata(peerId, {
-                            type: 'screen-share-start',
-                            streamId: screenShareStream.id
-                        });
-                    }
+                    // CRITICAL: Trigger renegotiation by creating a new offer
+                    // This is required when adding tracks to existing connections
+                    (async () => {
+                        try {
+                            const offer = await pc.createOffer();
+                            await pc.setLocalDescription(offer);
+                            
+                            // Send the new offer via Supabase Realtime
+                            if (window.signalingChannel) {
+                                await window.signalingChannel.send({
+                                    type: 'broadcast',
+                                    event: 'offer',
+                                    payload: {
+                                        from: window.currentParticipantId,
+                                        to: peerId,
+                                        offer: offer
+                                    }
+                                });
+                                console.log(`🔄 Renegotiation offer sent to ${peerId} for screen share`);
+                            }
+                        } catch (renegErr) {
+                            console.error(`❌ Renegotiation failed for ${peerId}:`, renegErr);
+                        }
+                    })();
+                    
                 } catch (err) {
                     console.error(`❌ Failed to add screen to ${peerId}:`, err);
                 }
-            });
+            }
             
             console.log(`📺 Broadcasting screen to ${addedCount} participants with stream ID: ${screenShareStream.id}`);
         }
@@ -321,7 +340,8 @@ async function stopScreenShareBroadcast() {
         if (window.webrtcPeerConnections) {
             let removedCount = 0;
             
-            Object.entries(window.webrtcPeerConnections).forEach(([peerId, pc]) => {
+            // Remove track from all peers and trigger renegotiation
+            for (const [peerId, pc] of Object.entries(window.webrtcPeerConnections)) {
                 const sender = screenShareSenders[peerId];
                 
                 if (sender) {
@@ -330,11 +350,36 @@ async function stopScreenShareBroadcast() {
                         delete screenShareSenders[peerId];
                         removedCount++;
                         console.log(`✅ Removed screen track from peer: ${peerId}`);
+                        
+                        // CRITICAL: Trigger renegotiation after removing track
+                        (async () => {
+                            try {
+                                const offer = await pc.createOffer();
+                                await pc.setLocalDescription(offer);
+                                
+                                // Send the new offer via Supabase Realtime
+                                if (window.signalingChannel) {
+                                    await window.signalingChannel.send({
+                                        type: 'broadcast',
+                                        event: 'offer',
+                                        payload: {
+                                            from: window.currentParticipantId,
+                                            to: peerId,
+                                            offer: offer
+                                        }
+                                    });
+                                    console.log(`🔄 Renegotiation offer sent to ${peerId} after screen stop`);
+                                }
+                            } catch (renegErr) {
+                                console.error(`❌ Renegotiation failed for ${peerId}:`, renegErr);
+                            }
+                        })();
+                        
                     } catch (err) {
                         console.error(`❌ Failed to remove screen from ${peerId}:`, err);
                     }
                 }
-            });
+            }
             
             console.log(`📹 Removed screen from ${removedCount} participants`);
         }
