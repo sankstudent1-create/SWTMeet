@@ -229,6 +229,41 @@ async function createPeerConnection(participantId) {
         }
     };
     
+    // Monitor ICE connection state for automatic recovery
+    pc.oniceconnectionstatechange = () => {
+        console.log(`ICE connection state for ${participantId}:`, pc.iceConnectionState);
+        
+        if (pc.iceConnectionState === 'failed') {
+            console.log(`🔄 ICE connection failed for ${participantId}, attempting restart...`);
+            // Attempt ICE restart
+            pc.restartIce();
+        } else if (pc.iceConnectionState === 'disconnected') {
+            console.log(`⚠️ ICE connection disconnected for ${participantId}, monitoring...`);
+            // Give it 5 seconds to reconnect before restarting
+            setTimeout(() => {
+                if (pc.iceConnectionState === 'disconnected') {
+                    console.log(`🔄 Still disconnected, restarting ICE for ${participantId}...`);
+                    pc.restartIce();
+                }
+            }, 5000);
+        } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+            console.log(`✅ ICE connection established for ${participantId}`);
+        }
+    };
+    
+    // Monitor connection state
+    pc.onconnectionstatechange = () => {
+        console.log(`Connection state for ${participantId}:`, pc.connectionState);
+        
+        if (pc.connectionState === 'failed') {
+            console.log(`❌ Connection failed for ${participantId}`);
+            // Optionally notify user
+            if (window.showNotification) {
+                window.showNotification(`Connection lost with participant`, 'warning');
+            }
+        }
+    };
+    
     // Handle connection state changes
     pc.onconnectionstatechange = () => {
         console.log('Connection state with', participantId, ':', pc.connectionState);

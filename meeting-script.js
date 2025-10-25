@@ -496,7 +496,16 @@ async function joinMeetingRoom() {
         // Request media permissions
         await requestMediaPermissions();
         
-        // Load participants
+        // CRITICAL: Setup WebRTC signaling BEFORE loading participants
+        // This ensures peer connections are ready when participants join
+        if (window.WebRTC && window.WebRTC.setupSignaling) {
+            await window.WebRTC.setupSignaling();
+            console.log('✅ WebRTC signaling initialized');
+        } else {
+            console.error('❌ WebRTC module not loaded!');
+        }
+        
+        // Load participants AFTER WebRTC is ready
         await loadParticipants();
         
         // Show host controls if user is host
@@ -504,25 +513,21 @@ async function joinMeetingRoom() {
             showHostControls();
         }
         
-        // Initialize new features
-        if (typeof WebRTC !== 'undefined') {
-            WebRTC.setupSignaling();
-            console.log('WebRTC initialized');
+        // Initialize other features
+        if (window.Reactions && window.Reactions.setupReactions) {
+            window.Reactions.setupReactions();
+            console.log('✅ Reactions initialized');
         }
         
-        if (typeof Reactions !== 'undefined') {
-            Reactions.setupReactions();
-            console.log('Reactions initialized');
+        if (window.RaiseHand && window.RaiseHand.setupRaiseHand) {
+            window.RaiseHand.setupRaiseHand();
+            console.log('✅ Raise hand initialized');
         }
         
-        if (typeof RaiseHand !== 'undefined') {
-            RaiseHand.setupRaiseHand();
-            console.log('Raise hand initialized');
-        }
-        
-        console.log('Joined meeting successfully');
+        console.log('✅ Joined meeting successfully');
     } catch (error) {
-        console.error('Error joining meeting room:', error);
+        console.error('❌ Error joining meeting room:', error);
+        showNotification('Failed to join meeting room', 'error');
     }
 }
 
