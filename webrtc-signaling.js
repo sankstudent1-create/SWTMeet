@@ -300,6 +300,15 @@ async function handleOffer(payload) {
     
     const participantId = payload.from;
     
+    // CRITICAL: Store screen share stream ID if this is a screen share offer
+    if (payload.isScreenShare && payload.screenShareStreamId) {
+        if (!window.screenShareStreamIds) {
+            window.screenShareStreamIds = new Set();
+        }
+        window.screenShareStreamIds.add(payload.screenShareStreamId);
+        console.log(`📺 Marked stream ${payload.screenShareStreamId} as screen share from ${participantId}`);
+    }
+    
     // Get or create peer connection
     let pc = webrtcPeerConnections[participantId];
     

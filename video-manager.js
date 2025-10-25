@@ -285,10 +285,12 @@ async function startScreenShareBroadcast() {
                                     payload: {
                                         from: window.currentParticipantId,
                                         to: peerId,
-                                        offer: offer
+                                        offer: offer,
+                                        isScreenShare: true,  // CRITICAL: Flag this as screen share
+                                        screenShareStreamId: screenShareStream.id  // Send stream ID
                                     }
                                 });
-                                console.log(`🔄 Renegotiation offer sent to ${peerId} for screen share`);
+                                console.log(`🔄 Renegotiation offer sent to ${peerId} for screen share (Stream ID: ${screenShareStream.id})`);
                             }
                         } catch (renegErr) {
                             console.error(`❌ Renegotiation failed for ${peerId}:`, renegErr);
