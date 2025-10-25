@@ -1,0 +1,373 @@
+/* ==================== VIDEO GRID LAYOUTS ==================== */
+
+/* Gallery View - Grid Layout */
+#video-grid.gallery-view {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)) !important;
+    gap: 10px;
+    padding: 10px;
+    width: 100%;
+    height: 100%;
+    grid-auto-flow: dense;
+}
+
+/* Ensure self-view is visible */
+.self-view {
+    display: flex !important;
+    width: 100%;
+    height: 100%;
+    min-width: 200px;
+    min-height: 150px;
+    aspect-ratio: 16/9;
+}
+
+/* Video participant base styles - don't override existing */
+.video-participant {
+    display: flex !important;
+}
+
+/* Speaker View - Large speaker + small participants */
+#video-grid.speaker-view {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+    grid-template-columns: 1fr;
+    grid-template-rows: 4fr 1fr;
+}
+
+#video-grid.speaker-view .video-participant:first-child {
+    grid-column: 1;
+    grid-row: 1;
+}
+
+#video-grid.speaker-view .video-participant:not(:first-child) {
+    grid-column: 1;
+    grid-row: 2;
+    display: inline-block;
+    width: calc(20% - 10px);
+    margin: 5px;
+}
+
+/* Pinned View - Large pinned + sidebar */
+#video-grid.pinned-view {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+    grid-template-columns: 3fr 1fr;
+    grid-template-rows: auto;
+}
+
+/* Screen Share Layout */
+.participants-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow-y: auto;
+    max-height: 100%;
+}
+
+.participants-sidebar .video-participant {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16/9;
+}
+
+/* Screen Share Prominent Display */
+.screen-share {
+    position: relative;
+    background: #000;
+    border: 3px solid #4CAF50 !important;
+    box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+}
+
+.screen-share::before {
+    content: '📺 Screen Share';
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(76, 175, 80, 0.9);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 10;
+}
+
+/* ==================== VIDEO CONTROLS OVERLAY ==================== */
+
+.video-participant {
+    position: relative;
+}
+
+.video-controls-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    z-index: 5;
+}
+
+.video-participant:hover .video-controls-overlay {
+    display: flex;
+}
+
+.video-control-btn {
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.video-control-btn:hover {
+    background: white;
+    transform: scale(1.1);
+}
+
+.video-control-btn svg {
+    width: 20px;
+    height: 20px;
+    fill: #333;
+}
+
+/* ==================== VIEW SWITCHER ==================== */
+
+.view-switcher {
+    position: absolute;
+    top: 70px;
+    right: 20px;
+    background: rgba(30, 30, 30, 0.95);
+    border-radius: 12px;
+    padding: 10px;
+    display: flex;
+    gap: 10px;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.view-btn {
+    background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.view-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.view-btn.active {
+    background: #4CAF50;
+    border-color: #4CAF50;
+}
+
+.view-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+/* ==================== PAGINATION ==================== */
+
+.video-pagination {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 30, 30, 0.95);
+    border-radius: 12px;
+    padding: 10px 20px;
+    display: none;
+    align-items: center;
+    gap: 15px;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.video-pagination button {
+    background: transparent;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.video-pagination button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.video-pagination button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.video-pagination span {
+    color: white;
+    font-size: 14px;
+}
+
+/* ==================== PIN INDICATOR ==================== */
+
+.video-participant.pinned {
+    border: 3px solid #FF9800 !important;
+    box-shadow: 0 0 20px rgba(255, 152, 0, 0.5);
+}
+
+.video-participant.pinned::after {
+    content: '📌 Pinned';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(255, 152, 0, 0.9);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: bold;
+    z-index: 10;
+}
+
+/* ==================== CONTEXT MENU ==================== */
+
+.video-context-menu {
+    position: absolute;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    padding: 8px 0;
+    min-width: 180px;
+    z-index: 1000;
+    display: none;
+}
+
+.video-context-menu.show {
+    display: block;
+}
+
+.context-menu-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: background 0.2s;
+}
+
+.context-menu-item:hover {
+    background: #f5f5f5;
+}
+
+.context-menu-item svg {
+    width: 16px;
+    height: 16px;
+    fill: #666;
+}
+
+.context-menu-divider {
+    height: 1px;
+    background: #e0e0e0;
+    margin: 4px 0;
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 768px) {
+    .view-switcher {
+        top: 60px;
+        right: 10px;
+        padding: 5px;
+        gap: 5px;
+    }
+    
+    .view-btn {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+    
+    #video-grid.pinned-view,
+    #video-grid.gallery-view {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .participants-sidebar {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 5px;
+    }
+}
+
+/* ==================== FULLSCREEN MODE ==================== */
+
+.video-participant:fullscreen {
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.video-participant:fullscreen video {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* ==================== ANIMATIONS ==================== */
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.video-participant {
+    animation: slideIn 0.3s ease-out;
+}
+
+/* ==================== LOADING STATE ==================== */
+
+.video-participant.loading::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
