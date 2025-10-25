@@ -1,0 +1,23 @@
+{
+  "name": "swtmeet",
+  "version": "1.0.0",
+  "description": "Modern video conferencing platform with WebRTC and Supabase",
+  "main": "index.html",
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "dev": "python3 -m http.server 8000"
+  },
+  "keywords": [
+    "webrtc",
+    "video-conferencing",
+    "supabase",
+    "real-time",
+    "video-chat"
+  ],
+  "author": "sankstudent1-create",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sankstudent1-create/SWTMeet.git"
+  }
+}
