@@ -94,9 +94,10 @@ function displayRemoteVideo(participantId, stream, participantName = 'Participan
     container.appendChild(video);
     container.appendChild(nameLabel);
     
-    // Add to grid (before self-view)
-    if (videoManager.localVideo) {
-        videoManager.videoGrid.insertBefore(container, videoManager.localVideo);
+    // Add to grid (before self-view if it exists and is in the DOM)
+    const selfView = document.getElementById('self-view');
+    if (selfView && selfView.parentNode === videoManager.videoGrid) {
+        videoManager.videoGrid.insertBefore(container, selfView);
     } else {
         videoManager.videoGrid.appendChild(container);
     }
