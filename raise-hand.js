@@ -31,18 +31,36 @@ function setupRaiseHand() {
 // ==================== TOGGLE RAISE HAND ====================
 
 window.toggleRaiseHand = async function() {
+    console.log('✋ toggleRaiseHand called');
+    
+    // Check if channel is initialized
     if (!raiseHandChannel) {
-        console.error('Raise hand channel not initialized');
+        console.error('❌ Raise hand channel not initialized');
+        if (window.showNotification) {
+            window.showNotification('Raise hand feature not ready yet', 'error');
+        }
+        return;
+    }
+    
+    // Check required globals
+    if (!window.currentParticipantId) {
+        console.error('❌ currentParticipantId not set for raise hand!');
+        if (window.showNotification) {
+            window.showNotification('Cannot raise hand - not properly initialized', 'error');
+        }
         return;
     }
     
     handRaised = !handRaised;
+    console.log('✋ Hand raised state:', handRaised);
     
-    // Get user name from global window object
+    // Get user name from global window object with fallbacks
     const userName = window.currentUser?.user_metadata?.full_name || 
                      window.currentUser?.email?.split('@')[0] || 
                      window.participants?.find(p => p.id === window.currentParticipantId)?.guest_name ||
                      'Guest';
+    
+    console.log('✋ Raise hand from:', userName, '(Participant ID:', window.currentParticipantId?.substring(0, 8) + '...)');
     
     const button = document.getElementById('toggle-raise-hand');
     const buttonText = document.getElementById('raise-hand-text');
@@ -53,7 +71,7 @@ window.toggleRaiseHand = async function() {
             type: 'broadcast',
             event: 'hand-raised',
             payload: {
-                participantId: currentParticipantId,
+                participantId: window.currentParticipantId,
                 userName: userName,
                 timestamp: Date.now()
             }
@@ -62,14 +80,17 @@ window.toggleRaiseHand = async function() {
         if (button) button.classList.add('active');
         if (buttonText) buttonText.textContent = 'Lower Hand';
         
-        showNotification('Hand raised', 'success');
+        console.log('✅ Hand raised successfully');
+        if (window.showNotification) {
+            window.showNotification('Hand raised', 'success');
+        }
     } else {
         // Lower hand
         await raiseHandChannel.send({
             type: 'broadcast',
             event: 'hand-lowered',
             payload: {
-                participantId: currentParticipantId,
+                participantId: window.currentParticipantId,
                 userName: userName
             }
         });
@@ -77,7 +98,10 @@ window.toggleRaiseHand = async function() {
         if (button) button.classList.remove('active');
         if (buttonText) buttonText.textContent = 'Raise Hand';
         
-        showNotification('Hand lowered', 'info');
+        console.log('✅ Hand lowered successfully');
+        if (window.showNotification) {
+            window.showNotification('Hand lowered', 'info');
+        }
     }
 };
 

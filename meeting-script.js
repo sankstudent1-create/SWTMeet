@@ -17,6 +17,16 @@ let chatSubscription = null;
 let currentParticipantId = null; // Store our participant ID for tracking
 let cleanupInterval = null; // Periodic cleanup interval
 
+// ==================== EXPOSE GLOBALS EARLY ====================
+// Expose critical variables globally for other modules (chat, reactions, raise-hand)
+// Initialize with null/empty values, will be updated during meeting initialization
+window.currentParticipantId = null;
+window.meetingId = null;
+window.supabaseClient = supabaseClient;
+window.participants = [];
+window.currentUser = null;
+window.userRole = 'participant';
+
 // --- DOM Elements ---
 const sidebar = document.getElementById('sidebar');
 const videoGrid = document.getElementById('video-grid');
@@ -638,6 +648,10 @@ function updateParticipantsList() {
     if (participantTab) {
         participantTab.textContent = `Participants (${participants.length})`;
     }
+    
+    // Update global participants array for chat and raise-hand modules
+    window.participants = participants;
+    console.log(`👥 Participants loaded: ${participants.length} total`);
 }
 
 // --- Show Host Controls ---
@@ -778,19 +792,47 @@ window.showParticipantMenu = function(participantId) {
 
 // ==================== CHAT FUNCTIONS ====================
 
-// Send Chat Message
+// Send Chat Message - GLOBAL
 window.sendChatMessage = async function() {
-    const message = chatInput?.value.trim();
-    if (!message) return;
+    console.log('💬 sendChatMessage called');
+    
+    // Get chat input element
+    const chatInputEl = document.getElementById('chat-input');
+    if (!chatInputEl) {
+        console.error('❌ Chat input element not found!');
+        return;
+    }
+    
+    const message = chatInputEl.value.trim();
+    if (!message) {
+        console.log('⚠️ Empty message, not sending');
+        return;
+    }
+    
+    console.log('📝 Message to send:', message);
     
     try {
+        // Check if we have required globals
+        if (!window.currentParticipantId) {
+            console.error('❌ currentParticipantId not set!');
+            if (window.showNotification) {
+                window.showNotification('Cannot send message - not properly initialized', 'error');
+            }
+            return;
+        }
+        
+        if (!window.meetingId) {
+            console.error('❌ meetingId not set!');
+            return;
+        }
+        
         // Get user name from various sources
         const userName = window.currentUser?.user_metadata?.full_name || 
                         window.currentUser?.email?.split('@')[0] || 
                         window.participants?.find(p => p.id === window.currentParticipantId)?.guest_name ||
                         'Guest';
         
-        console.log('💬 Sending chat message from:', userName);
+        console.log('💬 Sending chat message from:', userName, '(Participant ID:', window.currentParticipantId?.substring(0, 8) + '...)');
         
         // Add to local array immediately for instant feedback
         const newMessage = {
@@ -1055,8 +1097,8 @@ window.removeParticipant = async function(participantId) {
 
 // ==================== UTILITY FUNCTIONS ====================
 
-// Show Notification
-function showNotification(message, type = 'info') {
+// Show Notification - GLOBAL
+window.showNotification = function(message, type = 'info') {
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
     notification.textContent = message;
@@ -1081,7 +1123,26 @@ function showNotification(message, type = 'info') {
         notification.style.animation = 'slideOut 0.3s ease-out';
         setTimeout(() => notification.remove(), 300);
     }, 3000);
-}
+};
+
+// Also create a shorthand reference
+const showNotification = window.showNotification;
+
+// Helper function to update global variables
+window.updateGlobals = function() {
+    window.currentParticipantId = currentParticipantId;
+    window.meetingId = meetingId;
+    window.supabaseClient = supabaseClient;
+    window.participants = participants;
+    window.currentUser = currentUser;
+    window.userRole = userRole;
+    
+    console.log('🔄 Globals updated:', {
+        participantId: window.currentParticipantId?.substring(0, 8) + '...',
+        participantCount: window.participants?.length || 0,
+        userRole: window.userRole
+    });
+};
 
 // Escape HTML
 function escapeHtml(text) {
@@ -1262,13 +1323,21 @@ async function initializeMeeting() {
         
         console.log('Current participant ID:', currentParticipantId);
         
-        // Expose globally for access from raise-hand.js, reactions.js, and other modules
+        // Update globals for access from raise-hand.js, reactions.js, and other modules
         window.currentParticipantId = currentParticipantId;
         window.meetingId = meetingId;
         window.supabaseClient = supabaseClient;
         window.participants = participants;
         window.currentUser = currentUser;
         window.userRole = userRole;
+        
+        console.log('✅ Global variables exposed:', {
+            currentParticipantId: window.currentParticipantId,
+            meetingId: window.meetingId,
+            userRole: window.userRole,
+            hasCurrentUser: !!window.currentUser,
+            participantCount: window.participants.length
+        });
         
         // Check if waiting room is enabled
         if (meeting.waiting_room_enabled && userRole !== 'host') {
