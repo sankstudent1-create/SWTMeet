@@ -366,23 +366,64 @@ async function handleOffer(payload) {
         
         // Handle incoming remote stream
         pc.ontrack = (event) => {
-            console.log('Received remote track from:', participantId);
+            console.log('Received remote track from:', participantId, event.track.kind, 'label:', event.track.label, 'stream ID:', event.streams[0]?.id);
             
-            if (!remoteStreams[participantId]) {
-                remoteStreams[participantId] = new MediaStream();
+            const stream = event.streams[0];
+            const streamId = stream?.id;
+            
+            // Initialize screen share stream IDs set
+            if (!window.screenShareStreamIds) {
+                window.screenShareStreamIds = new Set();
             }
             
-            remoteStreams[participantId].addTrack(event.track);
+            // Check if this is a screen share based on registered stream IDs
+            const isKnownScreenShare = streamId && window.screenShareStreamIds.has(streamId);
             
-            // Use VideoManager to display remote video
-            if (window.VideoManager) {
-                const participant = window.participants?.find(p => p.id === participantId);
-                const participantName = participant?.user?.user_metadata?.full_name || 
-                                       participant?.user?.email?.split('@')[0] || 
-                                       participant?.guest_name ||
-                                       'Participant';
+            const labelIndicatesScreen = event.track.kind === 'video' && 
+                                         (event.track.label.toLowerCase().includes('screen') ||
+                                          event.track.label.toLowerCase().includes('window') ||
+                                          event.track.label.toLowerCase().includes('monitor') ||
+                                          event.track.label.toLowerCase().includes('display'));
+            
+            const isDifferentStream = streamId && remoteStreams[participantId]?.id && streamId !== remoteStreams[participantId]?.id;
+            const alreadyHasCameraVideo = remoteStreams[participantId]?.getVideoTracks().length > 0;
+            
+            const isScreenShare = event.track.kind === 'video' && 
+                                 (isKnownScreenShare || 
+                                  labelIndicatesScreen || 
+                                  (isDifferentStream && alreadyHasCameraVideo));
+            
+            if (isScreenShare && stream) {
+                // This is a screen share track - display separately
+                console.log('📺 Received screen share from:', participantId, 'Stream ID:', streamId);
                 
-                window.VideoManager.displayRemote(participantId, remoteStreams[participantId], participantName);
+                if (window.VideoManager) {
+                    const participant = window.participants?.find(p => p.id === participantId);
+                    const participantName = participant?.user?.user_metadata?.full_name || 
+                                           participant?.user?.email?.split('@')[0] || 
+                                           participant?.guest_name ||
+                                           'Participant';
+                    
+                    window.VideoManager.displayScreenShare(stream, participantName);
+                }
+            } else {
+                // Regular camera/audio track
+                if (!remoteStreams[participantId]) {
+                    remoteStreams[participantId] = stream || new MediaStream();
+                } else if (stream) {
+                    remoteStreams[participantId] = stream;
+                }
+                
+                // Only display video when we have video tracks
+                if (event.track.kind === 'video' && window.VideoManager) {
+                    const participant = window.participants?.find(p => p.id === participantId);
+                    const participantName = participant?.user?.user_metadata?.full_name || 
+                                           participant?.user?.email?.split('@')[0] || 
+                                           participant?.guest_name ||
+                                           'Participant';
+                    
+                    window.VideoManager.displayRemote(participantId, remoteStreams[participantId], participantName);
+                }
             }
         };
         
