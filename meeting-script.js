@@ -1485,12 +1485,7 @@ async function syncMeetingState() {
                 user_id,
                 guest_name,
                 status,
-                joined_at,
-                users!participants_user_id_fkey (
-                    id,
-                    email,
-                    raw_user_meta_data
-                )
+                joined_at
             `)
             .eq('meeting_id', meetingId)
             .in('status', ['admitted', 'waiting'])
