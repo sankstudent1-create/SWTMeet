@@ -21,6 +21,8 @@
     "url": "https://github.com/sankstudent1-create/SWTMeet.git"
   },
   "dependencies": {
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/core": "^7.4.4",
     "express": "^4.18.2"
   }
 }

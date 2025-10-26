@@ -38,3 +38,24 @@ build/
 # Backup files
 *.bak
 *.backup
+
+# Android
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/.idea/
+android/*.iml
+*.apk
+*.aab
+*.keystore
+android/app/release/
+
+# Capacitor
+www/
+.capacitor/
+
+# Build artifacts
+dist/
+build/
+

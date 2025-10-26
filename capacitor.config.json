@@ -1,0 +1,27 @@
+{
+  "appId": "com.swtmeet.app",
+  "appName": "SWTMeet",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "allowNavigation": [
+      "*"
+    ]
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "Camera": {
+      "permissions": [
+        "camera",
+        "photos"
+      ]
+    },
+    "Microphone": {
+      "permissions": [
+        "record"
+      ]
+    }
+  }
+}
