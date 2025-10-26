@@ -1432,17 +1432,83 @@ function setupRealtimeSubscriptions() {
         }
     });
     
-    // Subscribe to chat messages
+    // Subscribe to chat messages - REAL-TIME
     chatSubscription = supabaseClient
         .channel(`chat:${meetingId}`)
         .on('postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `meeting_id=eq.${meetingId}` },
-            (payload) => {
-                console.log('New chat message:', payload);
-                loadChatHistory();
+            async (payload) => {
+                console.log('💬 Real-time chat message received:', payload);
+                
+                // Get the new message data
+                const newMsg = payload.new;
+                
+                // Check if this message is from us (already in our local array)
+                const isOwnMessage = newMsg.participant_id === window.currentParticipantId;
+                
+                if (isOwnMessage) {
+                    console.log('⏭️ Skipping own message (already added locally)');
+                    return;
+                }
+                
+                // Check if we already have this message (prevent duplicates)
+                if (chatMessages.some(m => m.id === newMsg.id)) {
+                    console.log('⏭️ Message already exists, skipping duplicate');
+                    return;
+                }
+                
+                // Fetch participant info for the author name
+                try {
+                    const { data: participant } = await supabaseClient
+                        .from('participants')
+                        .select('user:users(full_name, email), guest_name')
+                        .eq('id', newMsg.participant_id)
+                        .single();
+                    
+                    const authorName = participant?.user?.full_name || 
+                                      participant?.guest_name || 
+                                      'Guest';
+                    
+                    // Add the new message to local array
+                    const messageObj = {
+                        id: newMsg.id,
+                        message: newMsg.message,
+                        author: authorName,
+                        isOwn: false,  // Not our message
+                        created_at: newMsg.created_at
+                    };
+                    
+                    chatMessages.push(messageObj);
+                    console.log('✅ Added real-time message from:', authorName);
+                    
+                    // Re-render chat
+                    renderChatMessages();
+                    
+                    // Show notification if chat is not visible
+                    if (document.getElementById('chat-panel')?.style.display === 'none') {
+                        if (window.showNotification) {
+                            window.showNotification(`💬 ${authorName}: ${newMsg.message.substring(0, 30)}...`, 'info');
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error processing real-time chat message:', err);
+                    // Fallback to reloading all messages
+                    await loadChatHistory();
+                }
             }
         )
-        .subscribe();
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                console.log('✅ Real-time chat connected and ready');
+            } else if (status === 'CHANNEL_ERROR') {
+                console.error('❌ Real-time chat connection error');
+                if (window.showNotification) {
+                    window.showNotification('Chat connection error - messages may not appear in real-time', 'error');
+                }
+            } else {
+                console.log('💬 Chat subscription status:', status);
+            }
+        });
     
     // Mark initial load complete after a short delay
     setTimeout(() => {
