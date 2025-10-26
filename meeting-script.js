@@ -1426,6 +1426,9 @@ async function leaveMeeting() {
             cleanupInterval = null;
         }
         
+        // Stop state sync monitoring
+        stopStateSyncMonitoring();
+        
         // Unsubscribe from realtime
         if (participantSubscription) participantSubscription.unsubscribe();
         if (meetingSubscription) meetingSubscription.unsubscribe();
@@ -1467,6 +1470,110 @@ if (leaveBtn) {
     leaveBtn.addEventListener('click', leaveMeeting);
 }
 
+// ==================== CONTINUOUS STATE SYNC ====================
+// This ensures the UI always reflects the current meeting state
+
+let stateSyncInterval = null;
+
+async function syncMeetingState() {
+    try {
+        // 1. Sync participants - check who's actually in the meeting
+        const { data: activeParticipants, error } = await supabaseClient
+            .from('participants')
+            .select(`
+                id,
+                user_id,
+                guest_name,
+                status,
+                joined_at,
+                users:user_id (
+                    id,
+                    email,
+                    user_metadata
+                )
+            `)
+            .eq('meeting_id', meetingId)
+            .in('status', ['admitted', 'waiting'])
+            .order('joined_at', { ascending: true });
+        
+        if (error) throw error;
+        
+        // Get current participant IDs from database
+        const dbParticipantIds = new Set(activeParticipants.map(p => p.id));
+        
+        // Get current participant IDs from UI
+        const uiParticipantIds = new Set(participants.map(p => p.id));
+        
+        // Find participants who left (in UI but not in DB)
+        const leftParticipants = participants.filter(p => !dbParticipantIds.has(p.id));
+        for (const participant of leftParticipants) {
+            console.log('🔄 State sync: Removing participant who left:', participant.id);
+            handleParticipantLeft(participant);
+        }
+        
+        // Find new participants (in DB but not in UI)
+        const newParticipants = activeParticipants.filter(p => !uiParticipantIds.has(p.id));
+        for (const participant of newParticipants) {
+            console.log('🔄 State sync: Adding new participant:', participant.id);
+            handleParticipantJoined(participant);
+        }
+        
+        // 2. Sync video elements - ensure all active participants have video elements
+        if (window.VideoManager && window.webrtcPeerConnections) {
+            for (const participant of activeParticipants) {
+                if (participant.id === currentParticipantId) continue; // Skip self
+                
+                // Check if video element exists
+                const videoElement = document.getElementById(`video-${participant.id}`);
+                const hasPeerConnection = window.webrtcPeerConnections[participant.id];
+                
+                // If we have a peer connection but no video element, create it
+                if (hasPeerConnection && !videoElement) {
+                    const remoteStream = window.WebRTC?.remoteStreams?.[participant.id];
+                    if (remoteStream && remoteStream.getVideoTracks().length > 0) {
+                        const participantName = participant.users?.user_metadata?.full_name || 
+                                               participant.users?.email?.split('@')[0] || 
+                                               participant.guest_name ||
+                                               'Participant';
+                        console.log('🔄 State sync: Recreating video element for:', participantName);
+                        window.VideoManager.displayRemote(participant.id, remoteStream, participantName);
+                    }
+                }
+            }
+        }
+        
+        // 3. Check for frozen video streams
+        if (window.VideoManager) {
+            const videoElements = document.querySelectorAll('.video-participant video');
+            videoElements.forEach(video => {
+                if (video.srcObject && video.paused) {
+                    console.log('🔄 State sync: Restarting paused video');
+                    video.play().catch(e => console.warn('Could not restart video:', e));
+                }
+            });
+        }
+        
+    } catch (error) {
+        console.error('❌ State sync error:', error);
+    }
+}
+
+function startStateSyncMonitoring() {
+    // Sync state every 3 seconds
+    stateSyncInterval = setInterval(syncMeetingState, 3000);
+    console.log('✅ State sync monitoring started (every 3 seconds)');
+}
+
+function stopStateSyncMonitoring() {
+    if (stateSyncInterval) {
+        clearInterval(stateSyncInterval);
+        stateSyncInterval = null;
+        console.log('⏹️ State sync monitoring stopped');
+    }
+}
+
+// ==================== INITIALIZATION ====================
+
 // Initialize meeting on page load
 if (typeof AuthService !== 'undefined' && typeof DatabaseService !== 'undefined') {
     document.addEventListener('DOMContentLoaded', () => {
@@ -1476,8 +1583,13 @@ if (typeof AuthService !== 'undefined' && typeof DatabaseService !== 'undefined'
         }
         // Then initialize meeting
         initializeMeeting();
+        
+        // Start continuous state sync after 5 seconds (give time for initial setup)
+        setTimeout(() => {
+            startStateSyncMonitoring();
+        }, 5000);
     });
 } else {
-    console.error('Supabase services not loaded. Please include config/supabase.js');
+    console.error('Required services not loaded. Please include config/supabase.js');
     showNotification('Configuration error. Please reload the page.', 'error');
 }

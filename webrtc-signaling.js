@@ -212,6 +212,15 @@ async function createPeerConnection(participantId) {
             
             // Only display video when we have video tracks
             if (event.track.kind === 'video') {
+                // Add track ended handler to detect freezing
+                event.track.onended = () => {
+                    console.log('⚠️ Video track ended for:', participantId);
+                    // Remove the video element
+                    if (window.VideoManager) {
+                        window.VideoManager.removeRemote(participantId);
+                    }
+                };
+                
                 if (window.VideoManager) {
                     const participant = window.participants?.find(p => p.id === participantId);
                     const participantName = participant?.user?.user_metadata?.full_name || 
@@ -300,23 +309,29 @@ async function createPeerConnection(participantId) {
         }
     };
     
-    // Create and send offer
+    // Create initial offer
     try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         
-        console.log('Sending offer to:', participantId);
-        await signalingChannel.send({
+        // CRITICAL: Include screen share info in initial offer for late joiners
+        const offerPayload = {
+            from: currentParticipantId,
+            to: participantId,
+            offer: offer,
+            isScreenShare: window.currentScreenShare && window.currentScreenShare.active,
+            screenShareStreamId: window.currentScreenShare?.stream?.id
+        };
+        
+        signalingChannel.send({
             type: 'broadcast',
             event: 'offer',
-            payload: {
-                from: currentParticipantId,
-                to: participantId,
-                offer: offer
-            }
+            payload: offerPayload
         });
-    } catch (error) {
-        console.error('Error creating offer:', error);
+        
+        console.log('Sent offer to:', participantId, offerPayload.isScreenShare ? '(with screen share)' : '');
+    } catch (err) {
+        console.error('Error creating offer:', err);
     }
 }
 
