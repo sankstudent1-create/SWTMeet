@@ -173,7 +173,18 @@ function displayScreenShare(stream, participantName = 'You') {
     video.srcObject = stream;
     video.autoplay = true;
     video.playsInline = true;
-    video.muted = true; // Mute screen share audio to prevent echo
+    
+    // Check if this is self-view (mute own screen share) or remote (allow audio)
+    const isSelfView = participantName === 'You';
+    video.muted = isSelfView; // Mute ONLY self-view to prevent echo, allow audio for others
+    
+    // Log audio status
+    const hasAudio = stream.getAudioTracks().length > 0;
+    if (hasAudio && !isSelfView) {
+        console.log('🔊 Screen share with audio from:', participantName);
+    } else if (!hasAudio) {
+        console.log('🔇 Screen share without audio from:', participantName);
+    }
     
     // Force video to play to avoid black screen
     video.onloadedmetadata = () => {
@@ -250,21 +261,39 @@ let screenShareSenders = {}; // Track screen share senders per peer
 
 async function startScreenShareBroadcast() {
     try {
-        // Get screen share stream
+        // Get screen share stream with audio
         screenShareStream = await navigator.mediaDevices.getDisplayMedia({
             video: {
                 cursor: "always",
                 width: { ideal: 1920 },
                 height: { ideal: 1080 }
             },
-            audio: true
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                sampleRate: 44100
+            }
         });
         
         // Display locally
         displayScreenShare(screenShareStream, 'You');
         
-        // ADD screen share track to all peer connections (don't replace camera)
-        const screenTrack = screenShareStream.getVideoTracks()[0];
+        // Get ALL tracks (video + audio)
+        const screenVideoTrack = screenShareStream.getVideoTracks()[0];
+        const screenAudioTracks = screenShareStream.getAudioTracks();
+        
+        // Log what we got
+        console.log('📺 Screen share tracks:', {
+            video: !!screenVideoTrack,
+            audio: screenAudioTracks.length,
+            streamId: screenShareStream.id
+        });
+        
+        if (screenAudioTracks.length > 0) {
+            console.log('🔊 Screen share audio enabled');
+        } else {
+            console.log('🔇 Screen share without audio (user didn\'t share audio or not supported)');
+        }
         
         // Mark the stream as screen share for detection
         screenShareStream._isScreenShare = true;
@@ -279,14 +308,27 @@ async function startScreenShareBroadcast() {
             let addedCount = 0;
             const renegotiationPromises = [];
             
-            // Add track to all peers and trigger renegotiation
+            // Add tracks to all peers and trigger renegotiation
             for (const [peerId, pc] of Object.entries(window.webrtcPeerConnections)) {
                 try {
-                    // Add screen track as a NEW sender (keeps camera track)
-                    const sender = pc.addTrack(screenTrack, screenShareStream);
-                    screenShareSenders[peerId] = sender;
+                    // Add screen VIDEO track
+                    const videoSender = pc.addTrack(screenVideoTrack, screenShareStream);
+                    
+                    // Store senders for later removal
+                    if (!screenShareSenders[peerId]) {
+                        screenShareSenders[peerId] = [];
+                    }
+                    screenShareSenders[peerId].push(videoSender);
+                    
+                    // Add screen AUDIO tracks if available
+                    screenAudioTracks.forEach(audioTrack => {
+                        const audioSender = pc.addTrack(audioTrack, screenShareStream);
+                        screenShareSenders[peerId].push(audioSender);
+                        console.log(`🔊 Screen audio track added to peer: ${peerId}`);
+                    });
+                    
                     addedCount++;
-                    console.log(`✅ Screen track added to peer: ${peerId} with stream ID: ${screenShareStream.id}`);
+                    console.log(`✅ Screen share tracks added to peer: ${peerId} (Video: ✅, Audio: ${screenAudioTracks.length > 0 ? '✅' : '❌'})`);
                     
                     // CRITICAL: Trigger renegotiation by creating a new offer
                     // This is required when adding tracks to existing connections
@@ -333,18 +375,28 @@ async function startScreenShareBroadcast() {
         // Store screen share state globally for late joiners
         window.currentScreenShare = {
             stream: screenShareStream,
-            track: screenTrack,
+            videoTrack: screenVideoTrack,
+            audioTracks: screenAudioTracks,
             participantId: window.currentParticipantId,
-            active: true
+            active: true,
+            hasAudio: screenAudioTracks.length > 0
         };
         
         // Also expose senders globally for webrtc-signaling
         window.screenShareSenders = screenShareSenders;
         
-        // Handle when user stops sharing
-        screenTrack.onended = () => {
+        // Handle when user stops sharing (video track ends)
+        screenVideoTrack.onended = () => {
+            console.log('📺 Screen share ended by user');
             stopScreenShareBroadcast();
         };
+        
+        // Also handle audio track ending (if audio was shared)
+        screenAudioTracks.forEach(audioTrack => {
+            audioTrack.onended = () => {
+                console.log('🔊 Screen share audio ended');
+            };
+        });
         
         return screenShareStream;
         
@@ -364,20 +416,26 @@ async function stopScreenShareBroadcast() {
             window.screenShareStreamIds.delete(screenShareStream.id);
         }
         
-        // Remove screen share track from all peer connections (keep camera)
+        // Remove screen share tracks (video + audio) from all peer connections (keep camera)
         if (window.webrtcPeerConnections) {
             let removedCount = 0;
             
-            // Remove track from all peers and trigger renegotiation
+            // Remove tracks from all peers and trigger renegotiation
             for (const [peerId, pc] of Object.entries(window.webrtcPeerConnections)) {
-                const sender = screenShareSenders[peerId];
+                const senders = screenShareSenders[peerId];
                 
-                if (sender) {
+                if (senders) {
                     try {
-                        pc.removeTrack(sender);
+                        // senders is now an array (can contain video + audio senders)
+                        const sendersArray = Array.isArray(senders) ? senders : [senders];
+                        
+                        sendersArray.forEach(sender => {
+                            pc.removeTrack(sender);
+                        });
+                        
                         delete screenShareSenders[peerId];
                         removedCount++;
-                        console.log(`✅ Removed screen track from peer: ${peerId}`);
+                        console.log(`✅ Removed screen share tracks from peer: ${peerId} (${sendersArray.length} tracks)`);
                         
                         // CRITICAL: Trigger renegotiation after removing track
                         (async () => {

@@ -95,21 +95,41 @@ async function createPeerConnection(participantId) {
         });
     }
     
-    // If screen share is active, add screen share track too
+    // If screen share is active, add screen share tracks (video + audio) to late joiner
     if (window.currentScreenShare && window.currentScreenShare.active) {
-        const screenTrack = window.currentScreenShare.track || window.currentScreenShare.stream.getVideoTracks()[0];
-        if (screenTrack && screenTrack.readyState === 'live') {
+        const screenVideoTrack = window.currentScreenShare.videoTrack || window.currentScreenShare.stream.getVideoTracks()[0];
+        const screenAudioTracks = window.currentScreenShare.audioTracks || window.currentScreenShare.stream.getAudioTracks();
+        
+        if (screenVideoTrack && screenVideoTrack.readyState === 'live') {
             try {
-                const sender = pc.addTrack(screenTrack, window.currentScreenShare.stream);
-                // Store sender in global screenShareSenders
+                // Initialize sender storage
                 if (!window.screenShareSenders) window.screenShareSenders = {};
-                window.screenShareSenders[participantId] = sender;
+                if (!window.screenShareSenders[participantId]) {
+                    window.screenShareSenders[participantId] = [];
+                }
+                
+                // Add video track
+                const videoSender = pc.addTrack(screenVideoTrack, window.currentScreenShare.stream);
+                window.screenShareSenders[participantId].push(videoSender);
+                
+                // Add audio tracks if available
+                if (screenAudioTracks && screenAudioTracks.length > 0) {
+                    screenAudioTracks.forEach(audioTrack => {
+                        if (audioTrack.readyState === 'live') {
+                            const audioSender = pc.addTrack(audioTrack, window.currentScreenShare.stream);
+                            window.screenShareSenders[participantId].push(audioSender);
+                            console.log('🔊 Added screen audio track to late joiner:', participantId);
+                        }
+                    });
+                }
                 
                 // Add stream ID to known screen share IDs
                 if (!window.screenShareStreamIds) window.screenShareStreamIds = new Set();
                 window.screenShareStreamIds.add(window.currentScreenShare.stream.id);
                 
-                console.log('✅ Added active screen share to new peer:', participantId, 'Stream ID:', window.currentScreenShare.stream.id);
+                console.log('✅ Added active screen share to late joiner:', participantId, 
+                    '(Video: ✅, Audio:', screenAudioTracks?.length || 0, 'tracks)',
+                    'Stream ID:', window.currentScreenShare.stream.id);
             } catch (err) {
                 console.error('❌ Failed to add screen share to new peer:', err);
             }
