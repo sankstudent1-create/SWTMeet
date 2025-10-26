@@ -279,8 +279,8 @@ async function startScreenShareBroadcast() {
                             await pc.setLocalDescription(offer);
                             
                             // Send the new offer via Supabase Realtime
-                            if (window.signalingChannel) {
-                                await window.signalingChannel.send({
+                            if (window.WebRTC && window.WebRTC.signalingChannel) {
+                                window.WebRTC.signalingChannel.send({
                                     type: 'broadcast',
                                     event: 'offer',
                                     payload: {
@@ -293,13 +293,12 @@ async function startScreenShareBroadcast() {
                                 });
                                 console.log(`🔄 Renegotiation offer sent to ${peerId} for screen share (Stream ID: ${screenShareStream.id})`);
                             } else {
-                                console.error(`❌ No signaling channel for ${peerId}`);
+                                console.error(`❌ No signaling channel available - WebRTC not initialized`);
                             }
                         } catch (renegErr) {
                             console.error(`❌ Renegotiation failed for ${peerId}:`, renegErr);
                         }
                     })();
-                    
                     renegotiationPromises.push(renegPromise);
                     
                 } catch (err) {

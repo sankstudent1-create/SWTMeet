@@ -1486,7 +1486,7 @@ async function syncMeetingState() {
                 guest_name,
                 status,
                 joined_at,
-                users:user_id (
+                users!participants_user_id_fkey (
                     id,
                     email,
                     user_metadata
