@@ -175,7 +175,20 @@ async function createPeerConnection(participantId) {
                                        participant?.guest_name ||
                                        'Participant';
                 
-                window.VideoManager.displayScreenShare(stream, participantName);
+                // CRITICAL: Check if screen share already exists and update it
+                const existingScreenShare = document.getElementById('screen-share-display');
+                if (existingScreenShare) {
+                    const video = existingScreenShare.querySelector('video');
+                    if (video) {
+                        console.log('🔄 Updating existing screen share video element with new stream');
+                        video.srcObject = stream;
+                        // Force video to play in case it was paused
+                        video.play().catch(e => console.warn('Video play failed:', e));
+                    }
+                } else {
+                    // Create new screen share display
+                    window.VideoManager.displayScreenShare(stream, participantName);
+                }
             }
         } else {
             // Regular camera/audio track
@@ -206,8 +219,21 @@ async function createPeerConnection(participantId) {
                                            participant?.guest_name ||
                                            'Participant';
                     
-                    console.log('📹 Displaying remote video for:', participantName, 'Stream:', remoteStreams[participantId]);
-                    window.VideoManager.displayRemote(participantId, remoteStreams[participantId], participantName);
+                    // CRITICAL: Check if video element already exists and update it
+                    const existingVideo = document.getElementById(`video-${participantId}`);
+                    if (existingVideo) {
+                        const video = existingVideo.querySelector('video');
+                        if (video) {
+                            console.log('🔄 Updating existing video element for:', participantName, 'with new stream');
+                            video.srcObject = remoteStreams[participantId];
+                            // Force video to play in case it was paused
+                            video.play().catch(e => console.warn('Video play failed:', e));
+                        }
+                    } else {
+                        // Create new video display
+                        console.log('📹 Displaying remote video for:', participantName, 'Stream:', remoteStreams[participantId]);
+                        window.VideoManager.displayRemote(participantId, remoteStreams[participantId], participantName);
+                    }
                 }
             }
         }
