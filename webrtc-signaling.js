@@ -511,9 +511,10 @@ window.WebRTC = {
     createPeerConnection,
     cleanupWebRTC,
     peerConnections: webrtcPeerConnections,
-    remoteStreams
+    remoteStreams,
+    get signalingChannel() {
+        return signalingChannel;
+    }
 };
-
-window.signalingChannel = signalingChannel; // Expose for other modules
 
 console.log('WebRTC signaling module loaded');

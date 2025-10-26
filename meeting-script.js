@@ -1489,7 +1489,7 @@ async function syncMeetingState() {
                 users!participants_user_id_fkey (
                     id,
                     email,
-                    user_metadata
+                    raw_user_meta_data
                 )
             `)
             .eq('meeting_id', meetingId)
