@@ -85,6 +85,14 @@ function displayRemoteVideo(participantId, stream, participantName = 'Participan
     video.autoplay = true;
     video.playsInline = true;
     
+    // Force video to play to avoid frozen/black video
+    video.onloadedmetadata = () => {
+        video.play().catch(e => {
+            console.warn('Video autoplay blocked for', participantName, ', retrying:', e);
+            setTimeout(() => video.play().catch(console.error), 100);
+        });
+    };
+    
     // Create name label
     const nameLabel = document.createElement('span');
     nameLabel.className = 'participant-name';
@@ -166,6 +174,15 @@ function displayScreenShare(stream, participantName = 'You') {
     video.autoplay = true;
     video.playsInline = true;
     video.muted = true; // Mute screen share audio to prevent echo
+    
+    // Force video to play to avoid black screen
+    video.onloadedmetadata = () => {
+        video.play().catch(e => {
+            console.warn('Screen share autoplay blocked, trying again:', e);
+            // Retry after a short delay
+            setTimeout(() => video.play().catch(console.error), 100);
+        });
+    };
     
     // Create label
     const label = document.createElement('span');

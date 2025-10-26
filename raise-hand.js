@@ -38,8 +38,10 @@ window.toggleRaiseHand = async function() {
     
     handRaised = !handRaised;
     
-    const userName = currentUser?.user_metadata?.full_name || 
-                     currentUser?.email?.split('@')[0] || 
+    // Get user name from global window object
+    const userName = window.currentUser?.user_metadata?.full_name || 
+                     window.currentUser?.email?.split('@')[0] || 
+                     window.participants?.find(p => p.id === window.currentParticipantId)?.guest_name ||
                      'Guest';
     
     const button = document.getElementById('toggle-raise-hand');
@@ -87,9 +89,20 @@ function handleHandRaised(payload) {
     // Update participant list UI
     updateParticipantHandStatus(payload.participantId, true);
     
-    // Notify host
-    if (userRole === 'host' && payload.participantId !== currentParticipantId) {
-        showNotification(`${payload.userName} raised their hand`, 'info');
+    // Notify host and show raised hand indicator
+    console.log(`✋ ${payload.userName} raised their hand`);
+    
+    if (window.userRole === 'host' && payload.participantId !== window.currentParticipantId) {
+        if (window.showNotification) {
+            window.showNotification(`✋ ${payload.userName} raised their hand`, 'info');
+        } else {
+            console.log(`[NOTIFICATION] ✋ ${payload.userName} raised their hand`);
+        }
+    }
+    
+    // Also show in console for all participants
+    if (payload.participantId !== window.currentParticipantId) {
+        console.log(`👥 Participant "${payload.userName}" has their hand raised`);
     }
 }
 

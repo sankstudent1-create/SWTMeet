@@ -524,6 +524,10 @@ async function joinMeetingRoom() {
             console.log('✅ Raise hand initialized');
         }
         
+        // Load chat history
+        await loadChatHistory();
+        console.log('✅ Chat history loaded');
+        
         console.log('✅ Joined meeting successfully');
     } catch (error) {
         console.error('❌ Error joining meeting room:', error);
@@ -780,7 +784,13 @@ window.sendChatMessage = async function() {
     if (!message) return;
     
     try {
-        const userName = currentUser?.user_metadata?.full_name || currentUser?.email?.split('@')[0] || 'Guest';
+        // Get user name from various sources
+        const userName = window.currentUser?.user_metadata?.full_name || 
+                        window.currentUser?.email?.split('@')[0] || 
+                        window.participants?.find(p => p.id === window.currentParticipantId)?.guest_name ||
+                        'Guest';
+        
+        console.log('💬 Sending chat message from:', userName);
         
         // Add to local array immediately for instant feedback
         const newMessage = {
@@ -795,21 +805,22 @@ window.sendChatMessage = async function() {
         renderChatMessages();
         chatInput.value = '';
         
-        // Save to database if user is authenticated
-        if (currentUser) {
-            // Get participant ID
-            const participant = participants.find(p => p.user_id === currentUser.id);
-            if (participant) {
-                const { error } = await supabaseClient
-                    .from('chat_messages')
-                    .insert([{
-                        meeting_id: meetingId,
-                        participant_id: participant.id,
-                        message: message,
-                        message_type: 'text'
-                    }]);
-                
-                if (error) console.error('Error saving chat:', error);
+        // Save to database
+        if (window.currentParticipantId) {
+            const { error } = await supabaseClient
+                .from('chat_messages')
+                .insert([{
+                    meeting_id: window.meetingId,
+                    participant_id: window.currentParticipantId,
+                    message: message,
+                    message_type: 'text'
+                }]);
+            
+            if (error) {
+                console.error('Error saving chat:', error);
+                showNotification('Failed to send message', 'error');
+            } else {
+                console.log('✅ Chat message saved to database');
             }
         }
     } catch (error) {
@@ -1250,6 +1261,14 @@ async function initializeMeeting() {
         }
         
         console.log('Current participant ID:', currentParticipantId);
+        
+        // Expose globally for access from raise-hand.js, reactions.js, and other modules
+        window.currentParticipantId = currentParticipantId;
+        window.meetingId = meetingId;
+        window.supabaseClient = supabaseClient;
+        window.participants = participants;
+        window.currentUser = currentUser;
+        window.userRole = userRole;
         
         // Check if waiting room is enabled
         if (meeting.waiting_room_enabled && userRole !== 'host') {
